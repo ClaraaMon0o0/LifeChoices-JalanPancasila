@@ -1,0 +1,1759 @@
+<?php
+session_start();
+
+// Inisialisasi sesi jika belum ada
+if (!isset($_SESSION['player_data'])) {
+    $_SESSION['player_data'] = [
+        'name' => '',
+        'age_group' => 'child',
+        'scores' => [
+            'sila_1' => 50, // Ketuhanan Yang Maha Esa (0-100)
+            'sila_2' => 50, // Kemanusiaan Yang Adil dan Beradab (0-100)
+            'sila_3' => 50, // Persatuan Indonesia (0-100)
+            'sila_4' => 50, // Kerakyatan yang Dipimpin oleh Hikmat Kebijaksanaan (0-100)
+            'sila_5' => 50  // Keadilan Sosial bagi Seluruh Rakyat Indonesia (0-100)
+        ],
+        'relationships' => 50, // 0-100
+        'reputation' => 50,    // 0-100
+        'emotional_wellbeing' => 50, // 0-100
+        'current_scenario' => 0,
+        'scenarios_completed' => [],
+        'total_score' => 50, // Total awal (rata-rata 50)
+        'last_choice_effects' => [],
+        'game_completed' => false,
+        'story_path' => [],
+        'consequences' => []
+    ];
+}
+
+// Data skenario berdasarkan kelompok usia dengan konsekuensi berantai
+$scenarios = [
+    'child' => [
+        [
+            'title' => 'Dompet di Halaman Sekolah',
+            'description' => 'Kamu menemukan dompet di halaman sekolah dengan uang dan kartu identitas di dalamnya.',
+            'image' => '👛',
+            'choices' => [
+                [
+                    'text' => 'Mengembalikannya ke guru',
+                    'effects' => [
+                        'sila_1' => 5,
+                        'sila_2' => 8,
+                        'sila_5' => 6,
+                        'relationships' => 8,
+                        'reputation' => 10,
+                        'emotional_wellbeing' => 5
+                    ],
+                    'insight' => 'Kejujuran adalah fondasi karakter yang kuat. Dengan mengembalikan dompet, kamu telah menerapkan nilai kejujuran dan keadilan sesuai sila ke-2 dan ke-5 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Guru memujimu di depan kelas dan kamu dipercaya menjadi ketua kelas'
+                ],
+                [
+                    'text' => 'Membiarkannya saja',
+                    'effects' => [
+                        'sila_2' => -3,
+                        'emotional_wellbeing' => -3
+                    ],
+                    'insight' => 'Tidak bertindak saat bisa membantu orang lain berarti melewatkan kesempatan untuk berbuat baik dan mengamalkan sila ke-2 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Dompet ditemukan oleh orang lain, tidak ada yang tahu kamu pernah melihatnya'
+                ],
+                [
+                    'text' => 'Mengambil uangnya untuk jajan',
+                    'effects' => [
+                        'sila_1' => -6,
+                        'sila_2' => -8,
+                        'sila_5' => -8,
+                        'reputation' => -10,
+                        'emotional_wellbeing' => -8,
+                        'relationships' => -6
+                    ],
+                    'insight' => 'Mengambil hak orang lain melanggar prinsip keadilan dan kemanusiaan. Ingat, rezeki yang halal membawa berkah dan sesuai dengan nilai semua sila Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu ketahuan oleh teman dan dilaporkan ke guru, orangtuamu dipanggil ke sekolah'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Tugas Sekolah Matematika',
+            'description' => 'Teman sebangkumu menawarkan untuk menyalin pekerjaan rumah matematikanya karena kamu belum selesai.',
+            'image' => '📚',
+            'choices' => [
+                [
+                    'text' => 'Mengerjakan sendiri dengan usaha',
+                    'effects' => [
+                        'sila_5' => 8,
+                        'emotional_wellbeing' => 6,
+                        'reputation' => 4
+                    ],
+                    'insight' => 'Keberhasilan yang diraih dengan usaha sendiri memberikan kepuasan batin dan membangun karakter disiplin yang sesuai dengan sila ke-5 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Meski nilai tidak sempurna, guru menghargai usahamu dan kemampuanmu semakin berkembang'
+                ],
+                [
+                    'text' => 'Menyalin sebagian yang sulit saja',
+                    'effects' => [
+                        'sila_5' => -4,
+                        'emotional_wellbeing' => -3
+                    ],
+                    'insight' => 'Menyalin pekerjaan orang lain, meski sebagian, mengurangi nilai kejujuran dalam dirimu dan bertentangan dengan sila ke-5 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu mendapat nilai baik tapi tidak paham materi yang disalin'
+                ],
+                [
+                    'text' => 'Menyalin seluruhnya dan mengaku hasil sendiri',
+                    'effects' => [
+                        'sila_1' => -6,
+                        'sila_5' => -10,
+                        'reputation' => -8,
+                        'emotional_wellbeing' => -6
+                    ],
+                    'insight' => 'Ketidakjujuran dalam hal kecil bisa menjadi kebiasaan buruk. Kejujuran dimulai dari hal-hal sederhana dan merupakan inti dari sila ke-1 dan ke-5 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Guru mengetahui kecuranganmu dan memberi hukuman tambahan'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Gotong Royong di Kelas',
+            'description' => 'Guru meminta bantuan untuk membersihkan kelas setelah pelajaran seni. Kamu sudah janji main dengan teman.',
+            'image' => '🧹',
+            'choices' => [
+                [
+                    'text' => 'Membantu membersihkan kelas',
+                    'effects' => [
+                        'sila_3' => 10,
+                        'sila_4' => 6,
+                        'relationships' => 8,
+                        'reputation' => 6
+                    ],
+                    'insight' => 'Gotong royong mencerminkan semangat persatuan dan kebersamaan sebagai bangsa Indonesia sesuai sila ke-3 dan ke-4 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Kelas menjadi bersih dan teman-teman mengharga kontribusimu'
+                ],
+                [
+                    'text' => 'Pergi main setelah membantu sebentar',
+                    'effects' => [
+                        'sila_3' => 4,
+                        'relationships' => 2
+                    ],
+                    'insight' => 'Kontribusi kecil lebih baik daripada tidak sama sekali, tapi komitmen penuh lebih dihargai dan lebih mencerminkan sila ke-3 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu tidak mendapat pujian tapi juga tidak dicela'
+                ],
+                [
+                    'text' => 'Langsung pergi tanpa membantu',
+                    'effects' => [
+                        'sila_3' => -8,
+                        'relationships' => -6,
+                        'reputation' => -6
+                    ],
+                    'insight' => 'Mementingkan diri sendiri dapat merusak hubungan sosial dan semangat kebersamaan yang menjadi inti sila ke-3 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Teman-teman kecewa dan menganggapmu tidak peduli pada kebersamaan'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Teman Baru dari Daerah Lain',
+            'description' => 'Ada siswa pindahan dari daerah lain yang bahasanya berbeda. Dia kesulitan beradaptasi.',
+            'image' => '👋',
+            'choices' => [
+                [
+                    'text' => 'Mengajak bermain dan membantu beradaptasi',
+                    'effects' => [
+                        'sila_2' => 8,
+                        'sila_3' => 10,
+                        'relationships' => 10,
+                        'emotional_wellbeing' => 6
+                    ],
+                    'insight' => 'Menerima perbedaan dan membantu sesama mencerminkan kemanusiaan yang adil dan semangat persatuan Indonesia.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Kamu mendapat teman baru yang setia dan dihargai guru'
+                ],
+                [
+                    'text' => 'Bersikap biasa saja',
+                    'effects' => [
+                        'sila_3' => -2
+                    ],
+                    'insight' => 'Tidak peduli pada kesulitan orang lain berarti melewatkan kesempatan untuk mengamalkan sila ke-3 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Hubungan biasa-biasa saja, tidak ada perkembangan'
+                ],
+                [
+                    'text' => 'Menghindari karena berbeda budaya',
+                    'effects' => [
+                        'sila_2' => -6,
+                        'sila_3' => -8,
+                        'relationships' => -5
+                    ],
+                    'insight' => 'Mengucilkan orang karena perbedaan bertentangan dengan semangat persatuan Indonesia dan kemanusiaan yang adil.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu dijauhi teman-teman yang inklusif'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Uang Saku untuk Jajan',
+            'description' => 'Ibu memberimu uang saku lebih untuk jajan. Di jalan, kamu melihat pengemis tua.',
+            'image' => '💰',
+            'choices' => [
+                [
+                    'text' => 'Memberikan sebagian uang untuk pengemis',
+                    'effects' => [
+                        'sila_2' => 10,
+                        'sila_5' => 8,
+                        'emotional_wellbeing' => 8
+                    ],
+                    'insight' => 'Berbagi dengan yang membutuhkan adalah wujud nyata kemanusiaan yang adil dan keadilan sosial.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Kamu merasa bahagia bisa membantu dan mendapat berkah'
+                ],
+                [
+                    'text' => 'Tetap menggunakan uang untuk jajan',
+                    'effects' => [
+                        'sila_2' => -3
+                    ],
+                    'insight' => 'Mementingkan kesenangan pribadi tanpa peduli sesama kurang mencerminkan nilai sila ke-2 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu menikmati jajan tapi sedikit merasa bersalah'
+                ],
+                [
+                    'text' => 'Mengabaikan dan mengejek pengemis',
+                    'effects' => [
+                        'sila_2' => -10,
+                        'sila_5' => -8,
+                        'reputation' => -6
+                    ],
+                    'insight' => 'Tidak menghargai martabat manusia bertentangan dengan sila ke-2 Pancasila tentang kemanusiaan yang adil.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Orang sekitar memandangmu sinis dan tidak peduli'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Kebersihan Lingkungan Sekolah',
+            'description' => 'Kamu melihat sampah berserakan di halaman sekolah padahal ada tempat sampah dekat situ.',
+            'image' => '🗑️',
+            'choices' => [
+                [
+                    'text' => 'Memungut dan membuang ke tempat sampah',
+                    'effects' => [
+                        'sila_3' => 8,
+                        'sila_5' => 6,
+                        'reputation' => 6
+                    ],
+                    'insight' => 'Menjaga kebersihan lingkungan adalah tanggung jawab bersama dan wujud keadilan sosial bagi lingkungan.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Lingkungan sekolah menjadi bersih dan kamu dijadikan contoh'
+                ],
+                [
+                    'text' => 'Melaporkan ke petugas kebersihan',
+                    'effects' => [
+                        'sila_5' => 4
+                    ],
+                    'insight' => 'Melaporkan masalah adalah baik, tapi tindakan langsung lebih mencerminkan kepedulian.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Sampah dibersihkan tapi kamu tidak mendapat apresiasi'
+                ],
+                [
+                    'text' => 'Membiarkan saja karena bukan urusanmu',
+                    'effects' => [
+                        'sila_3' => -6,
+                        'sila_5' => -4
+                    ],
+                    'insight' => 'Tidak peduli pada kebersihan lingkungan mencerminkan kurangnya rasa persatuan dan tanggung jawab sosial.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Lingkungan semakin kotor dan tidak nyaman'
+                ]
+            ]
+        ]
+    ],
+    'teen' => [
+        [
+            'title' => 'Perbedaan Pendapat di Grup Projek',
+            'description' => 'Dalam kerja kelompok, ada perbedaan pendapat yang tajam tentang cara menyelesaikan proyek.',
+            'image' => '👥',
+            'choices' => [
+                [
+                    'text' => 'Mengajak diskusi dan voting demokratis',
+                    'effects' => [
+                        'sila_4' => 12,
+                        'sila_3' => 8,
+                        'relationships' => 8,
+                        'reputation' => 6
+                    ],
+                    'insight' => 'Musyawarah untuk mufakat adalah inti dari demokrasi Pancasila yang menghargai setiap suara sesuai sila ke-4.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Kelompok mencapai kesepakatan dan proyek berjalan lancar'
+                ],
+                [
+                    'text' => 'Memaksa menggunakan pendapatmu',
+                    'effects' => [
+                        'sila_4' => -8,
+                        'sila_3' => -6,
+                        'relationships' => -10,
+                        'emotional_wellbeing' => -6
+                    ],
+                    'insight' => 'Memaksakan kehendak bertentangan dengan semangat kerakyatan yang dipimpin oleh hikmat kebijaksanaan dalam sila ke-4 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Beberapa anggota kelompok mengundurkan diri dan proyek tertunda'
+                ],
+                [
+                    'text' => 'Mengikuti pendapat mayoritas tanpa diskusi',
+                    'effects' => [
+                        'sila_4' => -4,
+                        'relationships' => -4
+                    ],
+                    'insight' => 'Demokrasi bukan hanya tentang jumlah suara, tapi juga proses diskusi yang sehat dan bermartabat sesuai sila ke-4 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Proyek selesai tapi tidak optimal karena kurang pertimbangan berbagai ide'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Bullying di Media Sosial',
+            'description' => 'Kamu melihat ada teman sekelas yang di-bully di grup media sosial karena penampilannya.',
+            'image' => '📱',
+            'choices' => [
+                [
+                    'text' => 'Membela teman dan melaporkan ke guru',
+                    'effects' => [
+                        'sila_2' => 12,
+                        'sila_5' => 10,
+                        'relationships' => 8,
+                        'reputation' => 10,
+                        'emotional_wellbeing' => 6
+                    ],
+                    'insight' => 'Membela yang lemah adalah wujud kemanusiaan yang adil dan beradab, serta keadilan sosial sesuai sila ke-2 dan ke-5 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Korban bullying merasa terbantu dan kamu dihormati sebagai pemberani'
+                ],
+                [
+                    'text' => 'Diam saja dan tidak ikut campur',
+                    'effects' => [
+                        'sila_2' => -6,
+                        'sila_5' => -6,
+                        'emotional_wellbeing' => -6
+                    ],
+                    'insight' => 'Diam melihat ketidakadilan sama saja membiarkan kesewenang-wenangan terjadi, bertentangan dengan sila ke-2 dan ke-5 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Bullying semakin menjadi dan korban semakin menderita'
+                ],
+                [
+                    'text' => 'Ikut mengejek agar diterima kelompok',
+                    'effects' => [
+                        'sila_2' => -12,
+                        'sila_5' => -10,
+                        'relationships' => -12,
+                        'reputation' => -14
+                    ],
+                    'insight' => 'Mengorbankan harga diri orang lain untuk diterima kelompok adalah bentuk ketidakadilan yang nyata dan melanggar sila ke-2 dan ke-5 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu dijauhi oleh teman-teman yang baik dan reputasimu rusak'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Kecurangan dalam Ujian',
+            'description' => 'Teman dekatmu membawa contekan dan menawarkan untuk berbagi jawaban selama ujian.',
+            'image' => '📝',
+            'choices' => [
+                [
+                    'text' => 'Menolak dan mengingatkan tentang konsekuensi',
+                    'effects' => [
+                        'sila_1' => 8,
+                        'sila_5' => 12,
+                        'reputation' => 8,
+                        'emotional_wellbeing' => 6
+                    ],
+                    'insight' => 'Integritas dalam keadaan sulit menunjukkan kualitas karakter sebenarnya. Kejujuran adalah investasi jangka panjang sesuai sila ke-1 dan ke-5 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Temanmu mengurungkan niat dan mengharga nasihatmu'
+                ],
+                [
+                    'text' => 'Menerima tapi tidak menggunakan',
+                    'effects' => [
+                        'sila_5' => -6,
+                        'emotional_wellbeing' => -4
+                    ],
+                    'insight' => 'Bersikap ambigu dalam prinsip bisa membuatmu terjebak dalam situasi yang lebih sulit dan bertentangan dengan sila ke-5 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu selamat dari kecurangan tapi merasa bersalah'
+                ],
+                [
+                    'text' => 'Menerima dan menggunakan contekan',
+                    'effects' => [
+                        'sila_1' => -10,
+                        'sila_5' => -12,
+                        'reputation' => -10,
+                        'emotional_wellbeing' => -8
+                    ],
+                    'insight' => 'Kecurangan merusak nilai keadilan dan merendahkan makna usaha yang sebenarnya, melanggar sila ke-1 dan ke-5 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu ketahuan dan mendapat sanksi akademik'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Pemilihan Ketua OSIS',
+            'description' => 'Kamu harus memilih antara teman dekat yang populer dan kandidat lain yang lebih kompeten.',
+            'image' => '🗳️',
+            'choices' => [
+                [
+                    'text' => 'Memilih berdasarkan kompetensi dan program kerja',
+                    'effects' => [
+                        'sila_4' => 10,
+                        'sila_5' => 12,
+                        'reputation' => 8
+                    ],
+                    'insight' => 'Memilih pemimpin berdasarkan kualitas adalah wujud kedewasaan berdemokrasi dan keadilan sosial.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'OSIS dipimpin dengan baik dan sekolah semakin maju'
+                ],
+                [
+                    'text' => 'Memilih teman dekat meski kurang kompeten',
+                    'effects' => [
+                        'sila_4' => -6,
+                        'sila_5' => -8,
+                        'relationships' => 5
+                    ],
+                    'insight' => 'Nepotisme merusak demokrasi dan bertentangan dengan prinsip keadilan sosial.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kinerja OSIS buruk dan banyak program gagal'
+                ],
+                [
+                    'text' => 'Tidak memilih sama sekali',
+                    'effects' => [
+                        'sila_4' => -8,
+                        'emotional_wellbeing' => -4
+                    ],
+                    'insight' => 'Mengabaikan hak pilih berarti tidak bertanggung jawab terhadap masa depan bersama.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu tidak berkontribusi dalam pembangunan sekolah'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Konflik Antar Geng Sekolah',
+            'description' => 'Ada ketegangan antara geng dari jurusan berbeda. Temanmu mengajak ikut konfrontasi.',
+            'image' => '⚡',
+            'choices' => [
+                [
+                    'text' => 'Menjadi penengah dan mengajak dialog',
+                    'effects' => [
+                        'sila_3' => 12,
+                        'sila_4' => 10,
+                        'relationships' => 10,
+                        'reputation' => 12
+                    ],
+                    'insight' => 'Menyelesaikan konflik dengan damai mencerminkan semangat persatuan dan kerakyatan yang dipimpin hikmat kebijaksanaan.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Konflik berhasil diredam dan kamu dihormati sebagai peacemaker'
+                ],
+                [
+                    'text' => 'Menghindar dan tidak ikut campur',
+                    'effects' => [
+                        'sila_3' => -4
+                    ],
+                    'insight' => 'Tidak peduli pada konflik sosial dapat memperburuk situasi dan merusak persatuan.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Konflik berlanjut tapi kamu tidak terlibat'
+                ],
+                [
+                    'text' => 'Ikut konfrontasi membela teman',
+                    'effects' => [
+                        'sila_3' => -15,
+                        'relationships' => -10,
+                        'reputation' => -12,
+                        'emotional_wellbeing' => -10
+                    ],
+                    'insight' => 'Kekerasan hanya menciptakan lebih banyak kekerasan dan merusak persatuan bangsa.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu mendapat skorsing dan reputasi buruk'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Plagiarisme Tugas Karya Tulis',
+            'description' => 'Kamu tergoda menyalin karya tulis dari internet untuk tugas besar karena waktu mepet.',
+            'image' => '📄',
+            'choices' => [
+                [
+                    'text' => 'Mengerjakan sendiri dengan referensi yang jujur',
+                    'effects' => [
+                        'sila_1' => 10,
+                        'sila_5' => 12,
+                        'emotional_wellbeing' => 8
+                    ],
+                    'insight' => 'Kejujuran akademik adalah fondasi integritas yang sesuai dengan sila ke-1 dan ke-5 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Nilai mungkin biasa tapi integritasmu terjaga'
+                ],
+                [
+                    'text' => 'Menyalin sebagian dan memparafrase',
+                    'effects' => [
+                        'sila_5' => -8,
+                        'emotional_wellbeing' => -6
+                    ],
+                    'insight' => 'Plagiarisme sekecil apapun tetap tidak etis dan bertentangan dengan keadilan akademik.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu mendapat nilai baik tapi merasa tidak pantas'
+                ],
+                [
+                    'text' => 'Menyalin seluruhnya dari internet',
+                    'effects' => [
+                        'sila_1' => -12,
+                        'sila_5' => -15,
+                        'reputation' => -10
+                    ],
+                    'insight' => 'Plagiarisme merusak nilai pendidikan dan keadilan bagi yang bekerja keras.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu ketahuan dan mendapat nilai nol plus hukuman'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Diskriminasi terhadap Siswa Difabel',
+            'description' => 'Ada siswa difabel yang kesulitan mengikuti kegiatan ekstrakurikuler karena fasilitas tidak aksesibel.',
+            'image' => '♿',
+            'choices' => [
+                [
+                    'text' => 'Mengusulkan perbaikan fasilitas dan membantu',
+                    'effects' => [
+                        'sila_2' => 15,
+                        'sila_5' => 12,
+                        'relationships' => 10,
+                        'reputation' => 10
+                    ],
+                    'insight' => 'Memperjuangkan kesetaraan untuk difabel adalah wujud nyata kemanusiaan yang adil dan beradab.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Sekolah menjadi lebih inklusif dan kamu dihargai banyak pihak'
+                ],
+                [
+                    'text' => 'Bersimpati tapi tidak bertindak',
+                    'effects' => [
+                        'sila_2' => -4,
+                        'sila_5' => -4
+                    ],
+                    'insight' => 'Simpati tanpa aksi tidak cukup untuk mewujudkan keadilan sosial.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Situasi tetap sama, tidak ada perubahan'
+                ],
+                [
+                    'text' => 'Menganggap bukan urusanmu',
+                    'effects' => [
+                        'sila_2' => -10,
+                        'sila_5' => -8,
+                        'relationships' => -6
+                    ],
+                    'insight' => 'Mengabaikan diskriminasi berarti mendukung ketidakadilan yang terjadi.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu dijauhi oleh teman-teman yang peduli inklusi'
+                ]
+            ]
+        ]
+    ],
+    'adult' => [
+        [
+            'title' => 'Konflik Pembagian Warisan',
+            'description' => 'Sebagai anak tertua, kamu harus memimpin pembagian warisan orang tua yang meninggal. Ada ketidaksepakatan di antara saudara.',
+            'image' => '⚖️',
+            'choices' => [
+                [
+                    'text' => 'Mengadakan musyawarah keluarga dengan adil',
+                    'effects' => [
+                        'sila_4' => 12,
+                        'sila_5' => 14,
+                        'relationships' => 10,
+                        'reputation' => 8
+                    ],
+                    'insight' => 'Keadilan dalam pembagian warisan mencerminkan penerapan sila ke-4 dan ke-5 yang seimbang dengan mengutamakan musyawarah dan keadilan.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Keluarga tetap rukun dan semua pihak menerima pembagian'
+                ],
+                [
+                    'text' => 'Mengambil bagian lebih besar sebagai anak tertua',
+                    'effects' => [
+                        'sila_4' => -10,
+                        'sila_5' => -12,
+                        'relationships' => -14,
+                        'emotional_wellbeing' => -10
+                    ],
+                    'insight' => 'Keserakahan dalam warisan dapat merusak hubungan keluarga selamanya dan bertentangan dengan prinsip keadilan sosial sila ke-5 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Hubungan dengan saudara rusak dan terjadi konflik berkepanjangan'
+                ],
+                [
+                    'text' => 'Menyerahkan seluruhnya kepada adik-adik',
+                    'effects' => [
+                        'sila_5' => 6,
+                        'relationships' => 6,
+                        'emotional_wellbeing' => 6
+                    ],
+                    'insight' => 'Pengorbanan untuk keluarga adalah mulia, tapi pastikan tidak mengabaikan hakmu sendiri agar tetap sesuai dengan prinsip keadilan sila ke-5.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kamu dihargai tapi kondisi keuangan pribadi terganggu'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Dilema Korupsi di Tempat Kerja',
+            'description' => 'Atasan menawarkan "uang terima kasih" dari proyek pemerintah dengan imbalan kemudahan administrasi.',
+            'image' => '💼',
+            'choices' => [
+                [
+                    'text' => 'Menolak dan melaporkan melalui jalur yang benar',
+                    'effects' => [
+                        'sila_1' => 14,
+                        'sila_2' => 12,
+                        'sila_5' => 16,
+                        'reputation' => 12,
+                        'emotional_wellbeing' => 10
+                    ],
+                    'insight' => 'Integritas melawan korupsi adalah wujud nyata pengamalan semua sila Pancasila, terutama keadilan sosial dan kemanusiaan yang adil.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Kamu dihormati sebagai pegawai berintegritas dan mendapat promosi'
+                ],
+                [
+                    'text' => 'Menerima karena takut dipecat',
+                    'effects' => [
+                        'sila_1' => -12,
+                        'sila_2' => -10,
+                        'sila_5' => -14,
+                        'emotional_wellbeing' => -16
+                    ],
+                    'insight' => 'Korupsi sekecil apapun merusak tatanan sosial dan menghambat keadilan bagi rakyat banyak, bertentangan dengan semua sila Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu hidup dalam ketakutan dan merasa bersalah terus-menerus'
+                ],
+                [
+                    'text' => 'Menerima tapi menyumbangkan untuk amal',
+                    'effects' => [
+                        'sila_1' => -8,
+                        'sila_5' => -10,
+                        'emotional_wellbeing' => -6
+                    ],
+                    'insight' => 'Uang haram tidak akan menjadi berkah meski disalurkan untuk amal. Kejujuran dimulai dari niat yang bersih sesuai sila ke-1 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Korupsi terbongkar dan kariermu hancur'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Bencana Alam di Daerah Terpencil',
+            'description' => 'Terjadi bencana alam di daerah terpencil. Perusahaanmu punya dana CSR yang bisa dialokasikan.',
+            'image' => '🌊',
+            'choices' => [
+                [
+                    'text' => 'Mengalokasikan dana maksimal dan turun langsung',
+                    'effects' => [
+                        'sila_2' => 16,
+                        'sila_3' => 14,
+                        'sila_5' => 12,
+                        'reputation' => 16,
+                        'emotional_wellbeing' => 12
+                    ],
+                    'insight' => 'Solidaritas sosial dalam bencana memperkuat persatuan bangsa dan mewujudkan keadilan sosial sesuai sila ke-2, ke-3, dan ke-5 Pancasila.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Bantuan tepat sasaran dan perusahaan mendapat penghargaan'
+                ],
+                [
+                    'text' => 'Memberi bantuan minimal sesuai kewajiban',
+                    'effects' => [
+                        'sila_2' => -6,
+                        'sila_3' => -4
+                    ],
+                    'insight' => 'Tanggung jawab sosial bukan hanya kewajiban formal, tapi panggilan kemanusiaan yang sesuai dengan semangat sila ke-2 Pancasila.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Bantuan diberikan tapi tidak signifikan dampaknya'
+                ],
+                [
+                    'text' => 'Tidak membantu dengan alasan tidak ada anggaran',
+                    'effects' => [
+                        'sila_2' => -12,
+                        'sila_3' => -10,
+                        'reputation' => -12,
+                        'relationships' => -8
+                    ],
+                    'insight' => 'Mengabaikan penderitaan sesama bertentangan dengan semangat kemanusiaan dan persatuan Indonesia dalam sila ke-2 dan ke-3 Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Reputasi perusahaan rusak dan masyarakat memboikot produkmu'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Konflik Lahan Masyarakat Adat',
+            'description' => 'Perusahaanmu ingin membuka lahan baru, tapi ada masyarakat adat yang tinggal di sana turun-temurun.',
+            'image' => '🌳',
+            'choices' => [
+                [
+                    'text' => 'Menghentikan proyek dan menghormati hak adat',
+                    'effects' => [
+                        'sila_2' => 15,
+                        'sila_4' => 12,
+                        'sila_5' => 18,
+                        'reputation' => 14
+                    ],
+                    'insight' => 'Menghormati hak masyarakat adat adalah implementasi nyata kemanusiaan, demokrasi, dan keadilan sosial.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Perusahaan mendapat citra baik dan dukungan masyarakat'
+                ],
+                [
+                    'text' => 'Memberi ganti rugi dan melanjutkan proyek',
+                    'effects' => [
+                        'sila_2' => -4,
+                        'sila_5' => -6
+                    ],
+                    'insight' => 'Uang tidak bisa menggantikan nilai budaya dan spiritualitas yang terancam.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Proyek berjalan tapi dengan resistensi masyarakat'
+                ],
+                [
+                    'text' => 'Mengabaikan dan melanjutkan paksa',
+                    'effects' => [
+                        'sila_2' => -18,
+                        'sila_4' => -15,
+                        'sila_5' => -20,
+                        'reputation' => -20
+                    ],
+                    'insight' => 'Pengabaian hak masyarakat adat adalah bentuk ketidakadilan yang sangat bertentangan dengan semua sila Pancasila.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Konflik horizontal dan boikot massal terhadap perusahaan'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Diskriminasi Gender di Tempat Kerja',
+            'description' => 'Atasan memberikan promosi kepada kolega laki-laki meski performa kerjamu lebih baik.',
+            'image' => '⚧️',
+            'choices' => [
+                [
+                    'text' => 'Mengajukan protes melalui jalur formal dengan bukti',
+                    'effects' => [
+                        'sila_2' => 12,
+                        'sila_5' => 15,
+                        'reputation' => 10,
+                        'emotional_wellbeing' => 8
+                    ],
+                    'insight' => 'Memperjuangkan kesetaraan gender adalah wujud kemanusiaan yang adil dan keadilan sosial.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Kebijakan perusahaan diperbaiki dan kamu dihormati'
+                ],
+                [
+                    'text' => 'Menerima dan berusaha lebih keras',
+                    'effects' => [
+                        'sila_5' => -6,
+                        'emotional_wellbeing' => -8
+                    ],
+                    'insight' => 'Menerima diskriminasi diam-diam berarti membiarkan ketidakadilan terus berlangsung.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Situasi tidak berubah, diskriminasi terus terjadi'
+                ],
+                [
+                    'text' => 'Mengundurkan diri tanpa perlawanan',
+                    'effects' => [
+                        'sila_2' => -8,
+                        'sila_5' => -10,
+                        'emotional_wellbeing' => -12
+                    ],
+                    'insight' => 'Lari dari masalah tidak menyelesaikan ketidakadilan sistemik.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Kamu kehilangan pekerjaan dan diskriminasi terus berlanjut'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Pencemaran Lingkungan oleh Perusahaan',
+            'description' => 'Kamu menemukan bukti perusahaan membuang limbah berbahaya ke sungai secara diam-diam.',
+            'image' => '🏭',
+            'choices' => [
+                [
+                    'text' => 'Melaporkan ke pihak berwajib dengan bukti lengkap',
+                    'effects' => [
+                        'sila_1' => 12,
+                        'sila_2' => 15,
+                        'sila_5' => 18,
+                        'reputation' => 14
+                    ],
+                    'insight' => 'Melindungi lingkungan adalah tanggung jawab moral dan wujud keadilan sosial bagi generasi mendatang.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Lingkungan diselamatkan dan kamu menjadi pahlawan lingkungan'
+                ],
+                [
+                    'text' => 'Melaporkan internal tapi tidak ke publik',
+                    'effects' => [
+                        'sila_5' => 6
+                    ],
+                    'insight' => 'Tindakan setengah hati tidak cukup untuk menghentikan kerusakan lingkungan yang serius.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Perusahaan berhenti sementara tapi tidak ada perubahan sistemik'
+                ],
+                [
+                    'text' => 'Diam saja karena takut dipecat',
+                    'effects' => [
+                        'sila_1' => -15,
+                        'sila_2' => -12,
+                        'sila_5' => -18,
+                        'emotional_wellbeing' => -15
+                    ],
+                    'insight' => 'Diam melihat kejahatan lingkungan sama saja dengan menjadi bagian dari kejahatan itu.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Lingkungan rusak parah dan kamu hidup dengan rasa bersalah'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Konflik SARA di Masyarakat',
+            'description' => 'Ada ketegangan antar kelompok berbeda suku dan agama di lingkungan tempat tinggalmu.',
+            'image' => '🕊️',
+            'choices' => [
+                [
+                    'text' => 'Menginisiasi dialog dan kegiatan bersama',
+                    'effects' => [
+                        'sila_1' => 15,
+                        'sila_2' => 12,
+                        'sila_3' => 18,
+                        'relationships' => 15,
+                        'reputation' => 12
+                    ],
+                    'insight' => 'Membangun perdamaian dalam keberagaman adalah inti dari semua sila Pancasila, terutama persatuan Indonesia.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Masyarakat rukun dan kamu menjadi pemersatu'
+                ],
+                [
+                    'text' => 'Tetap netral dan tidak terlibat',
+                    'effects' => [
+                        'sila_3' => -6
+                    ],
+                    'insight' => 'Netralitas dalam konflik SARA bisa dianggap sebagai pembiaran terhadap ketegangan.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Konflik berlanjut dengan intensitas rendah'
+                ],
+                [
+                    'text' => 'Memihak kelompok yang sepaham',
+                    'effects' => [
+                        'sila_1' => -12,
+                        'sila_2' => -10,
+                        'sila_3' => -20,
+                        'relationships' => -15
+                    ],
+                    'insight' => 'Memihak dalam konflik SARA hanya akan memperdalam jurang perpecahan.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Konflik semakin memanas dan lingkungan tidak aman'
+                ]
+            ]
+        ],
+        [
+            'title' => 'Korupsi Dana Bansos Covid-19',
+            'description' => 'Kamu mengetahui ada penyelewengan dana bantuan sosial untuk masyarakat terdampak pandemi.',
+            'image' => '🦠',
+            'choices' => [
+                [
+                    'text' => 'Melaporkan ke KPK dengan bukti konkret',
+                    'effects' => [
+                        'sila_1' => 18,
+                        'sila_2' => 20,
+                        'sila_5' => 22,
+                        'reputation' => 16
+                    ],
+                    'insight' => 'Memerangi korupsi di masa krisis adalah wujud tertinggi kemanusiaan dan keadilan sosial.',
+                    'next_scenario' => 'positive',
+                    'consequence' => 'Dana terselamatkan dan kamu membantu banyak keluarga'
+                ],
+                [
+                    'text' => 'Melaporkan secara anonim',
+                    'effects' => [
+                        'sila_5' => 8
+                    ],
+                    'insight' => 'Tindakan berani diperlukan untuk melawan korupsi yang merugikan rakyat.',
+                    'next_scenario' => 'neutral',
+                    'consequence' => 'Kasus ditangani tapi tidak ada pengakuan'
+                ],
+                [
+                    'text' => 'Takut dan tidak berbuat apa-apa',
+                    'effects' => [
+                        'sila_1' => -18,
+                        'sila_2' => -16,
+                        'sila_5' => -20,
+                        'emotional_wellbeing' => -18
+                    ],
+                    'insight' => 'Membiarkan korupsi berarti ikut menanggung dosa kolektif yang merugikan masyarakat.',
+                    'next_scenario' => 'negative',
+                    'consequence' => 'Banyak keluarga menderita dan kamu hidup dengan penyesalan'
+                ]
+            ]
+        ]
+    ]
+];
+
+// Fungsi untuk memproses pilihan
+function processChoice($choice_index) {
+    global $scenarios;
+    
+    $player_data = &$_SESSION['player_data'];
+    $age_group = $player_data['age_group'];
+    $current_scenario = $player_data['current_scenario'];
+    
+    // Validasi pilihan
+    if (!isset($scenarios[$age_group][$current_scenario]['choices'][$choice_index])) {
+        return false;
+    }
+    
+    $choice = $scenarios[$age_group][$current_scenario]['choices'][$choice_index];
+    
+    // Simpan efek pilihan untuk ditampilkan di popup
+    $player_data['last_choice_effects'] = $choice['effects'];
+    $player_data['last_choice_insight'] = $choice['insight'];
+    $player_data['last_consequence'] = $choice['consequence'];
+    $player_data['next_scenario_type'] = $choice['next_scenario'];
+    
+    // Simpan jalur cerita
+    $player_data['story_path'][] = [
+        'age_group' => $age_group,
+        'scenario_title' => $scenarios[$age_group][$current_scenario]['title'],
+        'choice' => $choice['text'],
+        'consequence' => $choice['consequence'],
+        'type' => $choice['next_scenario']
+    ];
+    
+    // Terapkan efek pilihan dengan batasan 0-100
+    foreach ($choice['effects'] as $stat => $value) {
+        if (in_array($stat, ['sila_1', 'sila_2', 'sila_3', 'sila_4', 'sila_5'])) {
+            $player_data['scores'][$stat] = max(0, min(100, $player_data['scores'][$stat] + $value));
+        } else {
+            $player_data[$stat] = max(0, min(100, $player_data[$stat] + $value));
+        }
+    }
+    
+    // Hitung ulang total score
+    calculateTotalScore();
+    
+    // Tandai skenario selesai
+    $player_data['scenarios_completed'][] = [
+        'age_group' => $age_group,
+        'scenario_index' => $current_scenario,
+        'choice_index' => $choice_index
+    ];
+    
+    // Pindah ke skenario berikutnya
+    $player_data['current_scenario']++;
+    
+    // Jika semua skenario di kelompok usia ini selesai, naikkan kelompok usia
+    if ($player_data['current_scenario'] >= count($scenarios[$age_group])) {
+        if ($age_group === 'child') {
+            $player_data['age_group'] = 'teen';
+        } elseif ($age_group === 'teen') {
+            $player_data['age_group'] = 'adult';
+        } else {
+            // Game selesai
+            $player_data['game_completed'] = true;
+        }
+        $player_data['current_scenario'] = 0;
+    }
+    
+    return true;
+}
+
+// Fungsi untuk menghitung total skor dengan benar (maksimal 100)
+function calculateTotalScore() {
+    $player_data = &$_SESSION['player_data'];
+    
+    // Hitung rata-rata nilai sila (0-100)
+    $sila_average = array_sum($player_data['scores']) / 5;
+    
+    // Hitung rata-rata statistik lainnya (0-100)
+    $stat_average = (
+        $player_data['relationships'] + 
+        $player_data['reputation'] + 
+        $player_data['emotional_wellbeing']
+    ) / 3;
+    
+    // Total score adalah rata-rata dari kedua nilai di atas (0-100)
+    $player_data['total_score'] = ($sila_average + $stat_average) / 2;
+    
+    return $player_data['total_score'];
+}
+
+// Fungsi untuk mendapatkan ending berdasarkan skor (0-100)
+function getEnding($total_score) {
+    if ($total_score >= 80) {
+        return [
+            'title' => 'Jalan Pancasila Sejati',
+            'description' => 'Kamu hidup damai, adil, dan dihormati semua orang. Pilihan-pilihanmu mencerminkan nilai-nilai Pancasila dalam kehidupan sehari-hari. Kamu menjadi teladan bagi masyarakat sekitar.',
+            'color' => '#27ae60',
+            'icon' => '🏆'
+        ];
+    } elseif ($total_score >= 60) {
+        return [
+            'title' => 'Jalan Baik tapi Rapuh',
+            'description' => 'Kamu baik, tapi masih sering abai pada nilai keadilan atau persatuan. Perlu lebih konsisten menerapkan Pancasila dalam setiap keputusan.',
+            'color' => '#f39c12',
+            'icon' => '⭐'
+        ];
+    } elseif ($total_score >= 40) {
+        return [
+            'title' => 'Jalan Egois',
+            'description' => 'Kamu sukses secara pribadi, tapi kehilangan rasa kemanusiaan. Ingatlah bahwa kebahagiaan sejati datang dari memberi, bukan mengambil.',
+            'color' => '#e67e22',
+            'icon' => '⚖️'
+        ];
+    } else {
+        return [
+            'title' => 'Jalan Gelap',
+            'description' => 'Kamu jauh dari nilai Pancasila, hidupmu terasa hampa dan penuh konflik. Mungkin sudah waktunya untuk introspeksi dan berubah.',
+            'color' => '#e74c3c',
+            'icon' => '💔'
+        ];
+    }
+}
+
+// Proses input form
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['action'])) {
+        switch ($_POST['action']) {
+            case 'start_game':
+                $_SESSION['player_data']['name'] = $_POST['player_name'] ?? 'Pemain';
+                break;
+            case 'make_choice':
+                if (isset($_POST['choice_index'])) {
+                    processChoice(intval($_POST['choice_index']));
+                }
+                break;
+            case 'restart_game':
+                session_destroy();
+                session_start();
+                $_SESSION['player_data'] = [
+                    'name' => '',
+                    'age_group' => 'child',
+                    'scores' => [
+                        'sila_1' => 50,
+                        'sila_2' => 50,
+                        'sila_3' => 50,
+                        'sila_4' => 50,
+                        'sila_5' => 50
+                    ],
+                    'relationships' => 50,
+                    'reputation' => 50,
+                    'emotional_wellbeing' => 50,
+                    'current_scenario' => 0,
+                    'scenarios_completed' => [],
+                    'total_score' => 50,
+                    'last_choice_effects' => [],
+                    'game_completed' => false,
+                    'story_path' => [],
+                    'consequences' => []
+                ];
+                break;
+        }
+    }
+}
+
+// Hitung total skor jika game selesai
+if (isset($_SESSION['player_data']['game_completed']) && $_SESSION['player_data']['game_completed']) {
+    calculateTotalScore();
+}
+?>
+
+<!-- HTML dan CSS tetap sama seperti sebelumnya -->
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeChoice: Jalan Pancasila</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* CSS tetap sama seperti sebelumnya */
+        :root {
+            --primary: #3498db;
+            --secondary: #2c3e50;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .game-content {
+            padding: 30px;
+        }
+        
+        .scenario-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid var(--primary);
+            transition: transform 0.3s;
+        }
+        
+        .scenario-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .scenario-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .scenario-icon {
+            font-size: 2.5rem;
+            margin-right: 15px;
+        }
+        
+        .scenario-title {
+            font-size: 1.5rem;
+            color: var(--secondary);
+        }
+        
+        .scenario-description {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        
+        .choices {
+            display: grid;
+            gap: 15px;
+            margin-top: 25px;
+        }
+        
+        .choice {
+            padding: 15px 20px;
+            background: var(--light);
+            border: 2px solid transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1rem;
+            text-align: left;
+        }
+        
+        .choice:hover {
+            background: var(--primary);
+            color: white;
+            transform: translateX(5px);
+        }
+        
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .sila-scores {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .sila-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            border-top: 4px solid var(--primary);
+        }
+        
+        .sila-name {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+        }
+        
+        .sila-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .positive {
+            color: var(--success);
+        }
+        
+        .negative {
+            color: var(--danger);
+        }
+        
+        .neutral {
+            color: #7f8c8d;
+        }
+        
+        .age-indicator {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: var(--light);
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: var(--secondary);
+        }
+        
+        .ending-screen {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .ending-title {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+        
+        .ending-description {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        
+        .btn:hover {
+            background: var(--secondary);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: modalAppear 0.5s;
+        }
+        
+        @keyframes modalAppear {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .modal-title {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: var(--secondary);
+        }
+        
+        .modal-insight {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        
+        .effects-list {
+            text-align: left;
+            margin: 20px 0;
+        }
+        
+        .effect-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: #ecf0f1;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s;
+        }
+        
+        .relationships-fill { background: var(--success); }
+        .reputation-fill { background: var(--primary); }
+        .emotional-fill { background: var(--warning); }
+        
+        .score-explanation {
+            background: var(--light);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: left;
+        }
+        
+        .total-score-display {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .total-score-value {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .score-breakdown {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .breakdown-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .story-path {
+            background: var(--light);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .story-item {
+            padding: 10px;
+            border-left: 4px solid var(--primary);
+            margin-bottom: 10px;
+            background: white;
+        }
+        
+        .consequence-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        
+        .positive-badge { background: var(--success); color: white; }
+        .neutral-badge { background: var(--warning); color: white; }
+        .negative-badge { background: var(--danger); color: white; }
+        
+        /* Badge hanya ditampilkan di akhir permainan */
+        .ending-screen .consequence-badge {
+            display: inline-block;
+        }
+        
+        /* Badge disembunyikan selama permainan */
+        .choice-badge {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                border-radius: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .game-content {
+                padding: 20px;
+            }
+            
+            .stats-container, .sila-scores, .score-breakdown {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-gamepad"></i> LifeChoice: Jalan Pancasila</h1>
+            <p>Simulator kehidupan berbasis pilihan moral Pancasila</p>
+        </div>
+        
+        <div class="game-content">
+            <?php if (empty($_SESSION['player_data']['name'])): ?>
+                <!-- Form nama pemain -->
+                <div class="scenario-card">
+                    <h2>Selamat Datang di LifeChoice!</h2>
+                    <p>Simulator kehidupan yang mengajarkan nilai-nilai Pancasila melalui pilihan sehari-hari.</p>
+                    <p>Dalam game ini, kamu akan menjalani berbagai situasi kehidupan dan membuat pilihan yang akan mempengaruhi skor Pancasila dan kehidupan karaktermu.</p>
+                    
+                    <div class="score-explanation">
+                        <h4><i class="fas fa-calculator"></i> Sistem Penilaian:</h4>
+                        <p><strong>Total Skor = Rata-rata Nilai 5 Sila Pancasila + Rata-rata Statistik</strong></p>
+                        <ul>
+                            <li>Setiap sila memiliki nilai 0-100</li>
+                            <li>Statistik: Hubungan Sosial, Reputasi, Kesejahteraan Emosional</li>
+                            <li>Skor Maksimal: 100 poin</li>
+                        </ul>
+                    </div>
+                    
+                    <form method="post" style="margin-top: 20px;">
+                        <div style="margin-bottom: 15px;">
+                            <label for="player_name" style="display: block; margin-bottom: 5px; font-weight: bold;">Masukkan nama Anda:</label>
+                            <input type="text" id="player_name" name="player_name" required 
+                                   style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 1rem;">
+                        </div>
+                        <input type="hidden" name="action" value="start_game">
+                        <button type="submit" class="btn">Mulai Permainan <i class="fas fa-play"></i></button>
+                    </form>
+                </div>
+                
+            <?php elseif (isset($_SESSION['player_data']['game_completed']) && $_SESSION['player_data']['game_completed']): ?>
+                <!-- Ending screen -->
+                <?php 
+                $total_score = $_SESSION['player_data']['total_score'];
+                $ending = getEnding($total_score);
+                ?>
+                <div class="ending-screen">
+                    <div class="total-score-display">
+                        <h2>Permainan Selesai!</h2>
+                        <div class="total-score-value"><?php echo round($total_score, 1); ?>/100</div>
+                        <p>Total Skor Akhir</p>
+                    </div>
+                    
+                    <div class="ending-title" style="color: <?php echo $ending['color']; ?>">
+                        <?php echo $ending['icon']; ?> <?php echo $ending['title']; ?>
+                    </div>
+                    <div class="ending-description">
+                        <?php echo $ending['description']; ?>
+                    </div>
+                    
+                    <div class="story-path">
+                        <h3><i class="fas fa-road"></i> Perjalanan Hidupmu:</h3>
+                        <?php foreach ($_SESSION['player_data']['story_path'] as $index => $story): ?>
+                            <div class="story-item">
+                                <strong><?php echo $story['scenario_title']; ?></strong><br>
+                                <em>Pilihan: <?php echo $story['choice']; ?></em><br>
+                                <span class="consequence-badge 
+                                    <?php 
+                                    $badge_class = '';
+                                    if ($story['type'] === 'positive') {
+                                        $badge_class = 'positive-badge';
+                                    } elseif ($story['type'] === 'negative') {
+                                        $badge_class = 'negative-badge';
+                                    } else {
+                                        $badge_class = 'neutral-badge';
+                                    }
+                                    echo $badge_class;
+                                    ?>">
+                                    <?php 
+                                    if ($story['type'] === 'positive') {
+                                        echo 'Pilihan Baik';
+                                    } elseif ($story['type'] === 'negative') {
+                                        echo 'Pilihan Buruk';
+                                    } else {
+                                        echo 'Pilihan Netral';
+                                    }
+                                    ?>
+                                </span><br>
+                                <small>Akibat: <?php echo $story['consequence']; ?></small>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    
+                    <div class="stats-container">
+                        <div class="stat-card">
+                            <div>Hubungan Sosial</div>
+                            <div class="stat-value"><?php echo $_SESSION['player_data']['relationships']; ?>/100</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill relationships-fill" style="width: <?php echo $_SESSION['player_data']['relationships']; ?>%"></div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div>Reputasi</div>
+                            <div class="stat-value"><?php echo $_SESSION['player_data']['reputation']; ?>/100</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill reputation-fill" style="width: <?php echo $_SESSION['player_data']['reputation']; ?>%"></div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div>Kesejahteraan Emosional</div>
+                            <div class="stat-value"><?php echo $_SESSION['player_data']['emotional_wellbeing']; ?>/100</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill emotional-fill" style="width: <?php echo $_SESSION['player_data']['emotional_wellbeing']; ?>%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="sila-scores">
+                        <?php 
+                        $sila_names = [
+                            'sila_1' => 'Ketuhanan Yang Maha Esa',
+                            'sila_2' => 'Kemanusiaan Yang Adil dan Beradab',
+                            'sila_3' => 'Persatuan Indonesia',
+                            'sila_4' => 'Kerakyatan yang Dipimpin oleh Hikmat Kebijaksanaan',
+                            'sila_5' => 'Keadilan Sosial bagi Seluruh Rakyat Indonesia'
+                        ];
+                        
+                        foreach ($_SESSION['player_data']['scores'] as $sila => $score): 
+                            $class = $score > 50 ? 'positive' : ($score < 50 ? 'negative' : 'neutral');
+                        ?>
+                            <div class="sila-card">
+                                <div class="sila-name"><?php echo $sila_names[$sila]; ?></div>
+                                <div class="sila-value <?php echo $class; ?>"><?php echo $score; ?>/100</div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    
+                    <form method="post" style="margin-top: 30px;">
+                        <input type="hidden" name="action" value="restart_game">
+                        <button type="submit" class="btn">Main Lagi <i class="fas fa-redo"></i></button>
+                    </form>
+                </div>
+                
+            <?php else: ?>
+                <!-- Game screen -->
+                <?php 
+                $player_data = $_SESSION['player_data'];
+                $age_group = $player_data['age_group'];
+                $current_scenario = $player_data['current_scenario'];
+                $scenario = $scenarios[$age_group][$current_scenario];
+                
+                // Tentukan label kelompok usia
+                $age_labels = [
+                    'child' => '🌱 Anak-anak (7-12 tahun)',
+                    'teen' => '🌿 Remaja (13-17 tahun)',
+                    'adult' => '🌺 Dewasa Muda (18-25 tahun)'
+                ];
+                ?>
+                
+                <div class="age-indicator">
+                    <?php echo $age_labels[$age_group]; ?>
+                </div>
+                
+                <div class="scenario-card">
+                    <div class="scenario-header">
+                        <div class="scenario-icon"><?php echo $scenario['image']; ?></div>
+                        <div class="scenario-title"><?php echo $scenario['title']; ?></div>
+                    </div>
+                    <div class="scenario-description"><?php echo $scenario['description']; ?></div>
+                    
+                    <form method="post" id="choice-form">
+                        <div class="choices">
+                            <?php foreach ($scenario['choices'] as $index => $choice): ?>
+                                <button type="submit" name="choice_index" value="<?php echo $index; ?>" class="choice">
+                                    <?php echo $choice['text']; ?>
+                                    <!-- Badge disembunyikan selama permainan dengan CSS -->
+                                    <span class="choice-badge">
+                                        <?php 
+                                        if ($choice['next_scenario'] === 'positive') {
+                                            echo 'Baik';
+                                        } elseif ($choice['next_scenario'] === 'negative') {
+                                            echo 'Buruk';
+                                        } else {
+                                            echo 'Netral';
+                                        }
+                                        ?>
+                                    </span>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                        <input type="hidden" name="action" value="make_choice">
+                    </form>
+                </div>
+                
+                <div class="total-score-display">
+                    <div class="total-score-value"><?php echo round($player_data['total_score'], 1); ?>/100</div>
+                    <p>Total Skor Saat Ini</p>
+                </div>
+                
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div><i class="fas fa-heart"></i> Hubungan Sosial</div>
+                        <div class="stat-value"><?php echo $player_data['relationships']; ?>/100</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill relationships-fill" style="width: <?php echo $player_data['relationships']; ?>%"></div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div><i class="fas fa-star"></i> Reputasi</div>
+                        <div class="stat-value"><?php echo $player_data['reputation']; ?>/100</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill reputation-fill" style="width: <?php echo $player_data['reputation']; ?>%"></div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div><i class="fas fa-smile"></i> Kesejahteraan Emosional</div>
+                        <div class="stat-value"><?php echo $player_data['emotional_wellbeing']; ?>/100</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill emotional-fill" style="width: <?php echo $player_data['emotional_wellbeing']; ?>%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sila-scores">
+                    <?php 
+                    $sila_names = [
+                        'sila_1' => 'Ketuhanan',
+                        'sila_2' => 'Kemanusiaan',
+                        'sila_3' => 'Persatuan',
+                        'sila_4' => 'Kerakyatan',
+                        'sila_5' => 'Keadilan'
+                    ];
+                    
+                    foreach ($player_data['scores'] as $sila => $score): 
+                        $class = $score > 50 ? 'positive' : ($score < 50 ? 'negative' : 'neutral');
+                    ?>
+                        <div class="sila-card">
+                            <div class="sila-name"><?php echo $sila_names[$sila]; ?></div>
+                            <div class="sila-value <?php echo $class; ?>"><?php echo $score; ?>/100</div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                
+            <?php endif; ?>
+        </div>
+    </div>
+    
+    <!-- Modal untuk menampilkan insight -->
+    <?php if (!empty($_SESSION['player_data']['last_choice_effects'])): ?>
+    <div class="modal" id="insight-modal" style="display: flex;">
+        <div class="modal-content">
+            <div class="modal-title"><i class="fas fa-lightbulb"></i> Insight Pancasila</div>
+            <div class="modal-insight"><?php echo $_SESSION['player_data']['last_choice_insight']; ?></div>
+            
+            <div style="background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <h4><i class="fas fa-exclamation-circle"></i> Konsekuensi:</h4>
+                <p><?php echo $_SESSION['player_data']['last_consequence']; ?></p>
+            </div>
+            
+            <div class="effects-list">
+                <h4>Dampak Pilihanmu:</h4>
+                <?php 
+                $sila_names = [
+                    'sila_1' => 'Ketuhanan',
+                    'sila_2' => 'Kemanusiaan',
+                    'sila_3' => 'Persatuan',
+                    'sila_4' => 'Kerakyatan',
+                    'sila_5' => 'Keadilan',
+                    'relationships' => 'Hubungan Sosial',
+                    'reputation' => 'Reputasi',
+                    'emotional_wellbeing' => 'Kesejahteraan Emosional'
+                ];
+                
+                foreach ($_SESSION['player_data']['last_choice_effects'] as $stat => $value): 
+                    $class = $value > 0 ? 'positive' : ($value < 0 ? 'negative' : 'neutral');
+                    $icon = $value > 0 ? 'fa-arrow-up' : ($value < 0 ? 'fa-arrow-down' : 'fa-minus');
+                ?>
+                    <div class="effect-item">
+                        <span><?php echo $sila_names[$stat]; ?></span>
+                        <span class="<?php echo $class; ?>">
+                            <i class="fas <?php echo $icon; ?>"></i> <?php echo $value > 0 ? "+".$value : $value; ?>
+                        </span>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            
+            <button class="btn" onclick="document.getElementById('insight-modal').style.display='none'">Lanjutkan <i class="fas fa-arrow-right"></i></button>
+        </div>
+    </div>
+    
+    <script>
+        // Reset efek pilihan setelah modal ditutup
+        document.getElementById('insight-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+            }
+        });
+    </script>
+    <?php 
+    // Reset efek pilihan setelah ditampilkan
+    $_SESSION['player_data']['last_choice_effects'] = [];
+    $_SESSION['player_data']['last_choice_insight'] = '';
+    $_SESSION['player_data']['last_consequence'] = '';
+    ?>
+    <?php endif; ?>
+</body>
+</html>
